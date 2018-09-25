@@ -1,0 +1,121 @@
+---
+title: "ML-prjoect"
+author: "MD"
+date: "September 23, 2018"
+output: html_document
+---
+
+## Overview
+####This document encompasses Coursera's course Practical Machine Learning project report. This project is aimed predicting the manner in which 6 participants performed some exercise . Using specific devices (Jawbone up, Nike FuelBand...) which are part of quantified self movement can collect data ata about personal activity. More details on gathering data for this study is located a : http://groupware.les.inf.puc-rio.br/har 
+
+
+
+##A-Uploading data and exploratory Analysis
+```{r setup, include=FALSE}
+#knitr::opts_chunk$set(echo = TRUE)
+#required library
+library(knitr)
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(rattle)
+library(randomForest)
+library(corrplot)
+set.seed(12345)
+
+# Training data source link :https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+# Testing data source link :https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+#Read data sets from URLs
+
+MLtraining <- read.csv((url("http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv")), na.strings= c("NA", ""))
+MLtesting <- read.csv((url("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv")), na.strings= c("NA", ""))
+
+# create a partition with the training dataset 
+inTrain  <- createDataPartition(MLtraining$classe, p=0.7, list=FALSE)
+TrainSet <- MLtraining[inTrain, ]
+TestSet  <- MLtraining[-inTrain, ]
+
+#data sets clean up : Variables with NA have to be removed 
+#NZV (Near Zero variance) and ID variables will be removed.
+
+# NZV variables clean up 
+NZV <- nearZeroVar(TrainSet)
+TrainSet <- TrainSet[, -NZV]
+TestSet  <- TestSet[, -NZV]
+
+# NA variables removal
+dataNA    <- sapply(TrainSet, function(x) mean(is.na(x))) > 0.95
+TrainSet <- TrainSet[, dataNA==FALSE]
+TestSet  <- TestSet[, dataNA==FALSE]
+
+# Identification variables (columns 1 to 5) clean up
+TrainSet <- TrainSet[, -(1:5)]
+TestSet  <- TestSet[, -(1:5)]
+
+#Depict matrix correlation 
+correlatMatrix <- cor(TrainSet[, -54])
+corrplot(correlatMatrix, order = "FPC", method = "color", type = "lower", 
+         tl.cex = 0.8, tl.col = rgb(0, 0, 0))
+
+
+```
+
+
+```{r SumStepsperday}
+##B-Prediction Models
+##Prediction models will be as follow:a-Random Forest; b-Decision Tree; c-Generalized Boosted Model
+
+#a) Method: Random Forest
+# model fit
+set.seed(12345)
+controlRF <- trainControl(method="cv", number=3, verboseIter=FALSE)
+modFitRandForest <- train(classe ~ ., data=TrainSet, method="rf",
+                          trControl=controlRF)
+modFitRandForest$finalModel
+
+# prediction on Test dataset
+predictRandForest <- predict(modFitRandForest, newdata=TestSet)
+confMatRandForest <- confusionMatrix(predictRandForest, TestSet$classe)
+confMatRandForest
+
+#b) Method: Decision Trees
+# model fit
+set.seed(12345)
+modFitDecTree <- rpart(classe ~ ., data=TrainSet, method="class")
+fancyRpartPlot(modFitDecTree)
+
+# prediction on Test dataset
+predictDecTree <- predict(modFitDecTree, newdata=TestSet, type="class")
+confMatDecTree <- confusionMatrix(predictDecTree, TestSet$classe)
+confMatDecTree
+
+##c) Method: Generalized Boosted Model
+# model fit
+set.seed(12345)
+controlGBM <- trainControl(method = "repeatedcv", number = 5, repeats = 1)
+modFitGBM  <- train(classe ~ ., data=TrainSet, method = "gbm",
+                    trControl = controlGBM, verbose = FALSE)
+modFitGBM$finalModel
+
+# prediction on Test dataset
+predictGBM <- predict(modFitGBM, newdata=TestSet)
+confMatGBM <- confusionMatrix(predictGBM, TestSet$classe)
+confMatGBM
+
+
+```
+
+##C. Applying the Selected Model to the Test Data
+####The accuracy of the 3 regression modeling methods above are:
+####a.	Random Forest : 0.9992
+####b.	Decision Tree : 0.7208
+####c.	GBM : 0.9856
+####Therefore, Random Forest model will be applied to predict (testing dataset) as follow.
+
+```{r Daily Total steps, echo=FALSE}
+#knitr::opts_chunk$set(echo = TRUE)
+predictTEST <- predict(modFitRandForest, newdata=MLtesting)
+predictTEST
+
+```
